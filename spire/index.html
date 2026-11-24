@@ -156,7 +156,7 @@ const CARD_POOL = [
   { id:'shrug',   name:'見切り',     type:'skill',  cost:1, icon:'👀', text:'7ブロック＋1ドロー', block:7, draw:1 },
   { id:'focus',   name:'集中',       type:'skill',  cost:0, icon:'🎯', text:'2ドロー', draw:2 },
   { id:'rage',    name:'激昂',       type:'power',  cost:1, icon:'🔥', text:'筋力+2（この戦闘中）', strength:2 },
-  { id:'venom',   name:'毒使い',     type:'power',  cost:1, icon:'☠️', text:'毒の効果が毎ターン追加で+2', venom:true },
+  { id:'venom',   name:'毒使い',     type:'power',  cost:1, icon:'☠️', text:'毒の効果が毎ターン追加で+2', venom:true, venomBonus:2 },
   { id:'regen',   name:'再生',       type:'power',  cost:1, icon:'💚', text:'毎ターン開始時に3回復', regen:3 },
   { id:'drain',   name:'吸収',       type:'attack', cost:1, icon:'🩸', text:'5ダメージ＋3回復', dmg:5, heal:3 },
   { id:'guard2',  name:'大盾',       type:'skill',  cost:2, icon:'🏰', text:'16ブロック', block:16 },
@@ -164,6 +164,19 @@ const CARD_POOL = [
 ];
 const CARD_BY_ID = {};
 CARD_POOL.forEach(c => CARD_BY_ID[c.id] = c);
+function cardText(c) {
+  const parts = [];
+  if (c.dmg) parts.push(c.dmg + 'ダメージ' + (c.hits && c.hits > 1 ? 'を' + c.hits + '回' : ''));
+  if (c.block) parts.push(c.block + 'ブロック');
+  if (c.poison) parts.push('毒' + c.poison);
+  if (c.vuln) parts.push('弱体化' + c.vuln);
+  if (c.draw) parts.push(c.draw + 'ドロー');
+  if (c.heal) parts.push(c.heal + '回復');
+  if (c.strength) parts.push('筋力+' + c.strength + '（この戦闘中）');
+  if (c.regen) parts.push('毎ターン開始時に' + c.regen + '回復');
+  if (c.venom) parts.push('毒の効果が毎ターン追加で+' + (c.venomBonus || 2));
+  return parts.join('＋');
+}
 function upgraded(card) {
   const c = Object.assign({}, card, { upgraded:true, name: card.name + '+' });
   if (c.dmg) c.dmg += 3;
@@ -172,7 +185,9 @@ function upgraded(card) {
   if (c.heal) c.heal += 2;
   if (c.regen) c.regen += 1;
   if (c.strength) c.strength += 1;
-  c.text = card.text + '（強化）';
+  if (c.draw && !c.dmg && !c.block) c.draw += 1; // 集中などドロー専用カード
+  if (c.venom) c.venomBonus = (c.venomBonus || 2) + 2; // 毒使い+ は毒ボーナス増
+  c.text = cardText(c);
   return c;
 }
 
@@ -232,7 +247,7 @@ function startBattle() {
   const e = enemyForFloor(S.floor);
   B = {
     enemy: e, ehp: e.hp, eblock: 0, estr: 0,
-    pblock: 0, pstr: 0, regen: 0, venom: false,
+    pblock: 0, pstr: 0, regen: 0, venom: false, venomBonus: 0,
     vuln: 0, weak: 0, poison: 0, epoison: 0,
     energy: 3, turn: 1,
     drawPile: shuffle(S.deck.slice()),
@@ -299,7 +314,7 @@ function playCard(idx) {
   if (c.type === 'power') B.exhaust.push(entry); else B.discard.push(entry);
 
   if (c.strength) { B.pstr += c.strength; addLog('🔥 筋力 +' + c.strength); }
-  if (c.venom) { B.venom = true; addLog('☠️ 毒使いが有効になった'); }
+  if (c.venom) { B.venom = true; B.venomBonus = Math.max(B.venomBonus, c.venomBonus || 2); addLog('☠️ 毒使いが有効になった（毒ボーナス +' + B.venomBonus + '）'); }
   if (c.regen) { B.regen += c.regen; addLog('💚 再生を得た'); }
   if (c.block) { B.pblock += c.block; addLog('🛡️ ブロック +' + c.block); }
   if (c.heal) { healPlayer(c.heal); addLog('💗 ' + c.heal + ' 回復'); }
@@ -313,8 +328,8 @@ function playCard(idx) {
     }
   }
   if (c.poison) {
-    B.epoison += c.poison + (B.venom ? 2 : 0);
-    addLog('🧪 敵に毒 ' + (c.poison + (B.venom ? 2 : 0)) + '（累計 ' + B.epoison + '）');
+    B.epoison += c.poison + (B.venom ? B.venomBonus : 0);
+    addLog('🧪 敵に毒 ' + (c.poison + (B.venom ? B.venomBonus : 0)) + '（累計 ' + B.epoison + '）');
   }
   if (c.vuln) { B.vuln += c.vuln; addLog('🎯 敵が弱体化（' + B.vuln + 'ターン）'); }
   if (c.draw) drawCards(c.draw);

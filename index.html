@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>あんこの星集めゲーム</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Hiragino Maru Gothic ProN", "Hiragino Sans", sans-serif;
+    background: linear-gradient(180deg, #1b2340 0%, #3a4a7a 70%, #6a7fb8 100%);
+    color: #fff; min-height: 100vh; display: flex; flex-direction: column;
+    align-items: center; overflow: hidden; touch-action: none;
+    -webkit-user-select: none; user-select: none;
+  }
+  h1 { font-size: 22px; margin: 14px 0 4px; }
+  #hud { display: flex; gap: 24px; font-size: 18px; margin: 6px 0 10px; }
+  #hud b { color: #ffd94d; }
+  #field {
+    position: relative; width: min(92vw, 420px); height: min(62vh, 520px);
+    background: rgba(255,255,255,0.06); border: 2px solid rgba(255,255,255,0.35);
+    border-radius: 16px; overflow: hidden;
+  }
+  .star {
+    position: absolute; font-size: 30px; line-height: 1;
+    transform: translate(-50%, -50%); pointer-events: none;
+    filter: drop-shadow(0 0 6px rgba(255,217,77,.9));
+  }
+  .bomb {
+    position: absolute; font-size: 28px; line-height: 1;
+    transform: translate(-50%, -50%); pointer-events: none;
+  }
+  #player {
+    position: absolute; bottom: 8px; font-size: 44px; line-height: 1;
+    transform: translateX(-50%); pointer-events: none;
+  }
+  #overlay {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 14px;
+    background: rgba(20, 25, 50, 0.72); text-align: center; padding: 20px;
+  }
+  #overlay p { font-size: 15px; line-height: 1.7; }
+  button {
+    font-size: 18px; font-weight: bold; padding: 12px 28px; border: none;
+    border-radius: 999px; background: #ffd94d; color: #333; cursor: pointer;
+  }
+  button:active { transform: scale(0.96); }
+  #msg { height: 24px; font-size: 15px; color: #ffd94d; margin-top: 8px; }
+</style>
+</head>
+<body>
+  <h1>⭐ あんこの星集め ⭐</h1>
+  <div id="hud">
+    <div>スコア：<b id="score">0</b></div>
+    <div>残り：<b id="time">30</b>秒</div>
+  </div>
+  <div id="field">
+    <div id="player">🧺</div>
+    <div id="overlay">
+      <p>落ちてくる ⭐ をカゴでキャッチしよう！<br>
+      💣 を取ると −5点だよ。<br>
+      カゴは指やマウスで左右に動かせるよ。</p>
+      <button id="startBtn">スタート！</button>
+    </div>
+  </div>
+  <div id="msg"></div>
+
+<script>
+  const field = document.getElementById('field');
+  const player = document.getElementById('player');
+  const scoreEl = document.getElementById('score');
+  const timeEl = document.getElementById('time');
+  const overlay = document.getElementById('overlay');
+  const startBtn = document.getElementById('startBtn');
+  const msg = document.getElementById('msg');
+
+  let score = 0, timeLeft = 30, playing = false;
+  let playerX = 0.5; // 0..1 (field width ratio)
+  let items = [];
+  let spawnTimer = null, gameTimer = null, rafId = null, lastTs = 0;
+
+  function setPlayer() {
+    player.style.left = (playerX * field.clientWidth) + 'px';
+  }
+
+  function moveTo(clientX) {
+    const r = field.getBoundingClientRect();
+    playerX = Math.min(0.97, Math.max(0.03, (clientX - r.left) / r.width));
+    setPlayer();
+  }
+  field.addEventListener('pointermove', e => { if (playing) moveTo(e.clientX); });
+  field.addEventListener('pointerdown', e => { if (playing) moveTo(e.clientX); });
+
+  function spawn() {
+    const isBomb = Math.random() < 0.18;
+    const el = document.createElement('div');
+    el.className = isBomb ? 'bomb' : 'star';
+    el.textContent = isBomb ? '💣' : '⭐';
+    field.appendChild(el);
+    items.push({
+      el, bomb: isBomb,
+      x: 0.05 + Math.random() * 0.9,
+      y: -0.05,
+      speed: 0.25 + Math.random() * 0.35 + (30 - timeLeft) * 0.004
+    });
+  }
+
+  function step(ts) {
+    if (!playing) return;
+    const dt = Math.min(0.05, (ts - lastTs) / 1000 || 0);
+    lastTs = ts;
+    const W = field.clientWidth, H = field.clientHeight;
+    const playerY = H - 40;
+    items = items.filter(it => {
+      it.y += it.speed * dt;
+      it.el.style.left = (it.x * W) + 'px';
+      it.el.style.top = (it.y * H) + 'px';
+      const yPx = it.y * H;
+      if (yPx > playerY - 26 && yPx < playerY + 30 &&
+          Math.abs(it.x - playerX) * W < 42) {
+        if (it.bomb) { score = Math.max(0, score - 5); flash('💣 あいたっ！ −5点'); }
+        else { score += 10; }
+        scoreEl.textContent = score;
+        it.el.remove();
+        return false;
+      }
+      if (yPx > H + 30) { it.el.remove(); return false; }
+      return true;
+    });
+    rafId = requestAnimationFrame(step);
+  }
+
+  let flashTimer = null;
+  function flash(text) {
+    msg.textContent = text;
+    clearTimeout(flashTimer);
+    flashTimer = setTimeout(() => msg.textContent = '', 1200);
+  }
+
+  function start() {
+    score = 0; timeLeft = 30; items.forEach(i => i.el.remove()); items = [];
+    scoreEl.textContent = '0'; timeEl.textContent = '30';
+    msg.textContent = '';
+    overlay.style.display = 'none';
+    playing = true; setPlayer();
+    spawnTimer = setInterval(spawn, 650);
+    gameTimer = setInterval(() => {
+      timeLeft--;
+      timeEl.textContent = timeLeft;
+      if (timeLeft <= 0) end();
+    }, 1000);
+    lastTs = performance.now();
+    rafId = requestAnimationFrame(step);
+  }
+
+  function end() {
+    playing = false;
+    clearInterval(spawnTimer); clearInterval(gameTimer);
+    cancelAnimationFrame(rafId);
+    items.forEach(i => i.el.remove()); items = [];
+    overlay.innerHTML =
+      '<p style="font-size:20px;">おつかれさま！🎉</p>' +
+      '<p>スコアは <b style="color:#ffd94d;font-size:24px;">' + score + '</b> 点だったよ！</p>' +
+      '<button id="againBtn">もう一回！</button>';
+    overlay.style.display = 'flex';
+    document.getElementById('againBtn').addEventListener('click', start);
+  }
+
+  startBtn.addEventListener('click', start);
+  window.addEventListener('resize', setPlayer);
+  setPlayer();
+</script>
+</body>
+</html>

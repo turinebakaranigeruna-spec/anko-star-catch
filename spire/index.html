@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>あんこの塔 ― デッキ構築ローグライク</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family:"Hiragino Maru Gothic ProN","Hiragino Sans",sans-serif;
+    background:linear-gradient(180deg,#14101f 0%,#241a38 60%,#3a2a55 100%);
+    color:#f2ead8; min-height:100vh; padding:10px;
+    -webkit-user-select:none; user-select:none;
+  }
+  #wrap { max-width:560px; margin:0 auto; }
+  h1 { font-size:20px; text-align:center; margin:6px 0 2px; }
+  #floorInfo { text-align:center; font-size:13px; color:#c9b8e8; margin-bottom:8px; }
+  .panel {
+    background:rgba(255,255,255,.07); border:1px solid rgba(255,255,255,.22);
+    border-radius:14px; padding:12px; margin-bottom:10px;
+  }
+  .row { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  .big { font-size:40px; }
+  .name { font-weight:bold; font-size:16px; }
+  .hpbar { height:12px; background:#3a2430; border-radius:6px; overflow:hidden; margin:6px 0 4px; }
+  .hpfill { height:100%; background:linear-gradient(90deg,#e5484d,#ff7a59); transition:width .3s; }
+  .hpfill.p { background:linear-gradient(90deg,#46a758,#7bd88a); }
+  .sub { font-size:13px; color:#d8cdea; }
+  .badge {
+    display:inline-block; font-size:12px; padding:2px 8px; border-radius:999px;
+    background:#4a3566; margin-right:4px; margin-top:2px;
+  }
+  .badge.intent { background:#8a3324; color:#ffd9d0; font-weight:bold; }
+  .badge.block { background:#2c4a7c; }
+  #hand { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; margin:10px 0; }
+  .card {
+    width:104px; min-height:138px; border-radius:12px; padding:8px; cursor:pointer;
+    background:linear-gradient(180deg,#fdf6e0,#f3dfae); color:#333;
+    border:2px solid #b08d3f; display:flex; flex-direction:column; gap:4px;
+    transition:transform .12s; position:relative;
+  }
+  .card:hover { transform:translateY(-6px); }
+  .card.disabled { opacity:.45; cursor:not-allowed; }
+  .card.disabled:hover { transform:none; }
+  .card.skill { background:linear-gradient(180deg,#e2f0ff,#bcd8f5); border-color:#4a74a8; }
+  .card.power { background:linear-gradient(180deg,#ffe3f2,#f7bcd8); border-color:#a84a7c; }
+  .card .cost {
+    position:absolute; top:-8px; left:-8px; width:26px; height:26px; border-radius:50%;
+    background:#3b6fe0; color:#fff; font-weight:bold; display:flex;
+    align-items:center; justify-content:center; font-size:14px; border:2px solid #fff;
+  }
+  .card .cname { font-weight:bold; font-size:14px; margin-top:6px; }
+  .card .ctype { font-size:11px; color:#776; }
+  .card .ctext { font-size:12px; line-height:1.5; }
+  .card .icon { font-size:24px; text-align:center; }
+  button {
+    font-size:16px; font-weight:bold; padding:11px 22px; border:none; border-radius:999px;
+    background:#ffd94d; color:#333; cursor:pointer;
+  }
+  button:active { transform:scale(.96); }
+  button.sub2 { background:#6a5a8f; color:#fff; font-size:14px; padding:9px 16px; }
+  #log {
+    font-size:12.5px; line-height:1.7; height:96px; overflow-y:auto;
+    background:rgba(0,0,0,.28); border-radius:10px; padding:8px 10px;
+  }
+  #screen-reward, #screen-end, #screen-rest { text-align:center; }
+  #rewardCards { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin:12px 0; }
+  .center { text-align:center; }
+  #energy { font-size:18px; }
+  #energy b { color:#ffd94d; font-size:22px; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <h1>🗼 あんこの塔</h1>
+  <div id="floorInfo">デッキ構築ローグライク ― 塔を登ってボスを倒そう！</div>
+
+  <!-- バトル画面 -->
+  <div id="screen-battle">
+    <div class="panel">
+      <div class="row">
+        <div>
+          <div class="name" id="enemyName">敵</div>
+          <div class="sub"><span id="enemyHpText"></span></div>
+        </div>
+        <div class="big" id="enemyIcon">👾</div>
+      </div>
+      <div class="hpbar"><div class="hpfill" id="enemyHp"></div></div>
+      <div id="enemyBadges"></div>
+    </div>
+
+    <div class="panel">
+      <div class="row">
+        <div>
+          <div class="name">🧝 あんこ</div>
+          <div class="sub"><span id="playerHpText"></span></div>
+        </div>
+        <div id="energy">エナジー <b id="energyText">3/3</b></div>
+      </div>
+      <div class="hpbar"><div class="hpfill p" id="playerHp"></div></div>
+      <div id="playerBadges"></div>
+    </div>
+
+    <div id="hand"></div>
+    <div class="row" style="margin-bottom:10px;">
+      <div class="sub">山札 <b id="drawCount">0</b> ／ 捨て札 <b id="discardCount">0</b> ／ デッキ <b id="deckCount">0</b>枚</div>
+      <button id="endTurnBtn">ターン終了</button>
+    </div>
+    <div id="log"></div>
+  </div>
+
+  <!-- 報酬画面 -->
+  <div id="screen-reward" class="panel" style="display:none;">
+    <div class="name" style="font-size:18px;">🎉 勝利！カード報酬</div>
+    <p class="sub" style="margin-top:6px;">1枚選んでデッキに加えよう（スキップもできるよ）</p>
+    <div id="rewardCards"></div>
+    <button class="sub2" id="skipRewardBtn">スキップする</button>
+  </div>
+
+  <!-- 休憩画面 -->
+  <div id="screen-rest" class="panel" style="display:none;">
+    <div class="name" style="font-size:18px;">🔥 焚き火で休憩</div>
+    <p class="sub" style="margin:8px 0 14px;">どちらか1つを選んでね</p>
+    <div class="row" style="justify-content:center; gap:12px;">
+      <button id="restHealBtn">休む（HP 30%回復）</button>
+      <button id="restUpgradeBtn">鍛える（カード1枚を強化）</button>
+    </div>
+    <div id="upgradeList" style="margin-top:12px;"></div>
+  </div>
+
+  <!-- 終了画面 -->
+  <div id="screen-end" class="panel" style="display:none;">
+    <div class="name" id="endTitle" style="font-size:20px;"></div>
+    <p class="sub" id="endText" style="margin:10px 0 16px; line-height:1.7;"></p>
+    <button id="restartBtn">もう一度登る！</button>
+  </div>
+
+  <div class="center" style="margin-top:6px;">
+    <button class="sub2" id="newRunBtn">最初からやり直す</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+// ===== カード定義 =====
+// type: attack / skill / power
+const CARD_POOL = [
+  { id:'strike',  name:'ストライク', type:'attack', cost:1, icon:'⚔️', text:'6ダメージ', dmg:6 },
+  { id:'defend',  name:'防御',       type:'skill',  cost:1, icon:'🛡️', text:'5ブロック', block:5 },
+  { id:'bash',    name:'強打',       type:'attack', cost:2, icon:'🔨', text:'8ダメージ＋弱体化2', dmg:8, vuln:2 },
+  { id:'cleave',  name:'薙ぎ払い',   type:'attack', cost:1, icon:'🌀', text:'5ダメージ＋毒2', dmg:5, poison:2 },
+  { id:'poison',  name:'毒の刃',     type:'attack', cost:1, icon:'🧪', text:'3ダメージ＋毒4', dmg:3, poison:4 },
+  { id:'heavy',   name:'ヘビーブロー', type:'attack', cost:2, icon:'💥', text:'14ダメージ', dmg:14 },
+  { id:'quick',   name:'クイック',   type:'attack', cost:0, icon:'⚡', text:'3ダメージ＋1ドロー', dmg:3, draw:1 },
+  { id:'ironwall',name:'鉄壁',       type:'skill',  cost:1, icon:'🧱', text:'9ブロック', block:9 },
+  { id:'shrug',   name:'見切り',     type:'skill',  cost:1, icon:'👀', text:'7ブロック＋1ドロー', block:7, draw:1 },
+  { id:'focus',   name:'集中',       type:'skill',  cost:0, icon:'🎯', text:'2ドロー', draw:2 },
+  { id:'rage',    name:'激昂',       type:'power',  cost:1, icon:'🔥', text:'筋力+2（この戦闘中）', strength:2 },
+  { id:'venom',   name:'毒使い',     type:'power',  cost:1, icon:'☠️', text:'毒の効果が毎ターン追加で+2', venom:true },
+  { id:'regen',   name:'再生',       type:'power',  cost:1, icon:'💚', text:'毎ターン開始時に3回復', regen:3 },
+  { id:'drain',   name:'吸収',       type:'attack', cost:1, icon:'🩸', text:'5ダメージ＋3回復', dmg:5, heal:3 },
+  { id:'guard2',  name:'大盾',       type:'skill',  cost:2, icon:'🏰', text:'16ブロック', block:16 },
+  { id:'rush',    name:'連撃',       type:'attack', cost:1, icon:'🥊', text:'4ダメージを2回', dmg:4, hits:2 },
+];
+const CARD_BY_ID = {};
+CARD_POOL.forEach(c => CARD_BY_ID[c.id] = c);
+function upgraded(card) {
+  const c = Object.assign({}, card, { upgraded:true, name: card.name + '+' });
+  if (c.dmg) c.dmg += 3;
+  if (c.block) c.block += 3;
+  if (c.poison) c.poison += 1;
+  if (c.heal) c.heal += 2;
+  if (c.regen) c.regen += 1;
+  if (c.strength) c.strength += 1;
+  c.text = card.text + '（強化）';
+  return c;
+}
+
+// ===== 敵定義（オリジナル） =====
+const ENEMIES = [
+  { name:'スライムン',   icon:'🟢', hp:34,  moves:[{k:'atk',v:6},{k:'atk',v:8},{k:'def'}] },
+  { name:'コウモリン',   icon:'🦇', hp:30,  moves:[{k:'atk',v:5},{k:'atk',v:5},{k:'buff'}] },
+  { name:'キノコ兵',     icon:'🍄', hp:42,  moves:[{k:'atk',v:7},{k:'poisonAtk',v:4},{k:'def'}] },
+  { name:'石ゴーレム',   icon:'🗿', hp:58,  moves:[{k:'atk',v:10},{k:'def'},{k:'atk',v:13}] },
+  { name:'影の騎士',     icon:'🥷', hp:52,  moves:[{k:'atk',v:9},{k:'atk',v:6},{k:'buff'},{k:'atk',v:12}] },
+  { name:'炎の精霊',     icon:'🔥', hp:48,  moves:[{k:'atk',v:11},{k:'atk',v:7},{k:'atk',v:7}] },
+];
+const ELITE = { name:'エリート・番人', icon:'👹', hp:78, moves:[{k:'atk',v:13},{k:'buff'},{k:'atk',v:16},{k:'def'}] };
+const BOSS  = { name:'塔の主 ドラゴニュート', icon:'🐉', hp:110, moves:[{k:'atk',v:14},{k:'atk',v:9},{k:'buff'},{k:'atk',v:18},{k:'def'}] };
+const TOTAL_FLOORS = 8; // 7戦 + ボス
+
+// ===== 状態 =====
+let S = null;
+function newRun() {
+  const deck = [];
+  for (let i=0;i<5;i++) deck.push('strike');
+  for (let i=0;i<4;i++) deck.push('defend');
+  deck.push('bash');
+  S = {
+    floor: 1, php: 60, pmax: 60,
+    deck: deck, // card ids or {up:id}
+    over: false,
+  };
+  logInit();
+  startBattle();
+}
+function cardObj(entry) {
+  if (typeof entry === 'string') return CARD_BY_ID[entry];
+  return upgraded(CARD_BY_ID[entry.up]);
+}
+function shuffle(a) {
+  for (let i=a.length-1;i>0;i--) { const j = Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
+  return a;
+}
+
+// ===== バトル =====
+let B = null;
+function enemyForFloor(f) {
+  if (f === TOTAL_FLOORS) return Object.assign({}, BOSS);
+  if (f === 4) return Object.assign({}, ELITE);
+  const base = ENEMIES[Math.floor(Math.random()*ENEMIES.length)];
+  const e = Object.assign({}, base);
+  e.hp = base.hp + (f-1)*4;
+  e.maxhp = e.hp;
+  return e;
+}
+function startBattle() {
+  show('battle');
+  const e = enemyForFloor(S.floor);
+  B = {
+    enemy: e, ehp: e.hp, eblock: 0, estr: 0,
+    pblock: 0, pstr: 0, regen: 0, venom: false,
+    vuln: 0, weak: 0, poison: 0, epoison: 0,
+    energy: 3, turn: 1,
+    drawPile: shuffle(S.deck.slice()),
+    hand: [], discard: [], exhaust: [],
+    intent: null,
+  };
+  document.getElementById('enemyName').textContent = e.name + (S.floor===TOTAL_FLOORS ? '（ボス）' : S.floor===4 ? '（エリート）' : '');
+  document.getElementById('enemyIcon').textContent = e.icon;
+  document.getElementById('floorInfo').textContent = 'フロア ' + S.floor + ' / ' + TOTAL_FLOORS;
+  addLog('―― フロア' + S.floor + '：' + e.name + ' が現れた！');
+  chooseIntent();
+  startTurn(true);
+}
+function chooseIntent() {
+  const moves = B.enemy.moves;
+  B.intent = moves[Math.floor(Math.random()*moves.length)];
+}
+function intentText() {
+  const i = B.intent;
+  if (i.k==='atk') return '⚔️ 次の行動：' + (i.v + B.estr) + 'ダメージで攻撃';
+  if (i.k==='poisonAtk') return '🧪 次の行動：' + (i.v + B.estr) + 'ダメージ＋毒';
+  if (i.k==='def') return '🛡️ 次の行動：防御する';
+  if (i.k==='buff') return '💪 次の行動：筋力を上げる';
+  return '';
+}
+function startTurn(first) {
+  if (B.regen) { healPlayer(B.regen); addLog('💚 再生で ' + B.regen + ' 回復'); }
+  if (B.epoison > 0) {
+    damageEnemyRaw(B.epoison, true);
+    B.epoison = Math.max(0, B.epoison - 1);
+    if (checkWin()) return;
+  }
+  B.pblock = 0;
+  B.energy = 3;
+  drawCards(5);
+  render();
+}
+function drawCards(n) {
+  for (let i=0;i<n;i++) {
+    if (B.drawPile.length === 0) {
+      B.drawPile = shuffle(B.discard); B.discard = [];
+      if (B.drawPile.length === 0) break;
+      addLog('山札をシャッフルし直した');
+    }
+    B.hand.push(B.drawPile.pop());
+  }
+}
+function healPlayer(n) { S.php = Math.min(S.pmax, S.php + n); }
+function damageEnemyRaw(n, isPoison) {
+  let dmg = n;
+  if (!isPoison && B.vuln > 0) dmg = Math.floor(dmg * 1.5);
+  const blocked = Math.min(B.eblock, dmg);
+  B.eblock -= blocked; dmg -= blocked;
+  B.ehp -= dmg;
+  addLog((isPoison ? '☠️ 毒で ' : '⚔️ ') + n + ' の攻撃' + (blocked ? '（' + blocked + 'ブロック）' : '') + ' → 敵に ' + dmg + ' ダメージ');
+}
+function playCard(idx) {
+  if (!B || S.over) return;
+  const entry = B.hand[idx];
+  const c = cardObj(entry);
+  if (c.cost > B.energy) return;
+  B.energy -= c.cost;
+  B.hand.splice(idx, 1);
+  if (c.type === 'power') B.exhaust.push(entry); else B.discard.push(entry);
+
+  if (c.strength) { B.pstr += c.strength; addLog('🔥 筋力 +' + c.strength); }
+  if (c.venom) { B.venom = true; addLog('☠️ 毒使いが有効になった'); }
+  if (c.regen) { B.regen += c.regen; addLog('💚 再生を得た'); }
+  if (c.block) { B.pblock += c.block; addLog('🛡️ ブロック +' + c.block); }
+  if (c.heal) { healPlayer(c.heal); addLog('💗 ' + c.heal + ' 回復'); }
+  if (c.dmg) {
+    const hits = c.hits || 1;
+    for (let h=0; h<hits; h++) {
+      let d = c.dmg + B.pstr;
+      if (B.weak > 0) { /* player weak not used */ }
+      damageEnemyRaw(d, false);
+      if (B.ehp <= 0) break;
+    }
+  }
+  if (c.poison) {
+    B.epoison += c.poison + (B.venom ? 2 : 0);
+    addLog('🧪 敵に毒 ' + (c.poison + (B.venom ? 2 : 0)) + '（累計 ' + B.epoison + '）');
+  }
+  if (c.vuln) { B.vuln += c.vuln; addLog('🎯 敵が弱体化（' + B.vuln + 'ターン）'); }
+  if (c.draw) drawCards(c.draw);
+  if (checkWin()) return;
+  render();
+}
+function checkWin() {
+  if (B.ehp <= 0) {
+    addLog('🎉 ' + B.enemy.name + ' を倒した！');
+    B = null;
+    if (S.floor >= TOTAL_FLOORS) { endRun(true); return true; }
+    showReward();
+    return true;
+  }
+  return false;
+}
+function endTurn() {
+  if (!B) return;
+  // 手札を捨てる
+  B.discard = B.discard.concat(B.hand); B.hand = [];
+  // 敵の行動
+  const i = B.intent;
+  B.eblock = 0;
+  if (i.k === 'atk' || i.k === 'poisonAtk') {
+    let dmg = i.v + B.estr;
+    const blocked = Math.min(B.pblock, dmg);
+    const real = dmg - blocked;
+    S.php -= real;
+    addLog('敵の攻撃！ ' + dmg + ' ダメージ' + (blocked ? '（' + blocked + 'ブロック）' : '') + ' → ' + real + ' 食らった');
+    if (i.k === 'poisonAtk') { B.poison += 2; addLog('🧪 毒を受けた（累計 ' + B.poison + '）'); }
+  } else if (i.k === 'def') {
+    B.eblock += 10; addLog('敵は防御した（ブロック+10）');
+  } else if (i.k === 'buff') {
+    B.estr += 2; addLog('敵の筋力が上がった（+2）');
+  }
+  if (B.vuln > 0) B.vuln--;
+  if (S.php <= 0) { endRun(false); return; }
+  // プレイヤーの毒
+  if (B.poison > 0) {
+    S.php -= B.poison;
+    addLog('☠️ 毒で ' + B.poison + ' ダメージ');
+    B.poison = Math.max(0, B.poison - 1);
+    if (S.php <= 0) { endRun(false); return; }
+  }
+  B.turn++;
+  chooseIntent();
+  startTurn(false);
+}
+
+// ===== 報酬・休憩 =====
+function showReward() {
+  show('reward');
+  const box = document.getElementById('rewardCards');
+  box.innerHTML = '';
+  const pool = shuffle(CARD_POOL.slice()).slice(0, 3);
+  pool.forEach(c => {
+    const el = cardElement(c, () => {
+      S.deck.push(c.id);
+      addLog('🃏 「' + c.name + '」をデッキに加えた');
+      nextFloor();
+    });
+    box.appendChild(el);
+  });
+}
+function nextFloor() {
+  S.floor++;
+  if (S.floor === 6) { showRest(); return; } // ボス前に休憩
+  startBattle();
+}
+function showRest() {
+  show('rest');
+  document.getElementById('floorInfo').textContent = '休憩ポイント（フロア ' + S.floor + ' / ' + TOTAL_FLOORS + '）';
+  document.getElementById('upgradeList').innerHTML = '';
+}
+function endRun(win) {
+  S.over = true;
+  show('end');
+  document.getElementById('endTitle').textContent = win ? '🏆 塔を制覇した！' : '💀 力尽きた…';
+  document.getElementById('endText').innerHTML = win
+    ? 'ボスのドラゴニュートを倒したよ！おめでとう、とらー！<br>最終HP：' + S.php + ' ／ デッキ：' + S.deck.length + '枚'
+    : 'フロア ' + S.floor + ' で倒れちゃった…。デッキの組み方を変えて、もう一度挑戦してみよう！';
+}
+
+// ===== 表示 =====
+function show(which) {
+  document.getElementById('screen-battle').style.display = which==='battle' ? '' : 'none';
+  document.getElementById('screen-reward').style.display = which==='reward' ? '' : 'none';
+  document.getElementById('screen-rest').style.display = which==='rest' ? '' : 'none';
+  document.getElementById('screen-end').style.display = which==='end' ? '' : 'none';
+}
+function cardElement(c, onClick) {
+  const el = document.createElement('div');
+  el.className = 'card ' + c.type;
+  el.innerHTML = '<div class="cost">' + c.cost + '</div>' +
+    '<div class="cname">' + c.name + '</div>' +
+    '<div class="ctype">' + (c.type==='attack' ? 'アタック' : c.type==='skill' ? 'スキル' : 'パワー') + '</div>' +
+    '<div class="icon">' + c.icon + '</div>' +
+    '<div class="ctext">' + c.text + '</div>';
+  if (onClick) el.addEventListener('click', onClick);
+  return el;
+}
+function render() {
+  if (!B) return;
+  const e = B.enemy;
+  document.getElementById('enemyHp').style.width = Math.max(0, B.ehp / e.maxhp * 100) + '%';
+  document.getElementById('enemyHpText').textContent = 'HP ' + Math.max(0, B.ehp) + ' / ' + e.maxhp;
+  document.getElementById('playerHp').style.width = Math.max(0, S.php / S.pmax * 100) + '%';
+  document.getElementById('playerHpText').textContent = 'HP ' + S.php + ' / ' + S.pmax;
+  document.getElementById('energyText').textContent = B.energy + '/3';
+  let eb = '<span class="badge intent">' + intentText() + '</span>';
+  if (B.eblock) eb += '<span class="badge block">🛡️ ' + B.eblock + '</span>';
+  if (B.estr) eb += '<span class="badge">筋力 +' + B.estr + '</span>';
+  if (B.vuln) eb += '<span class="badge">弱体化 ' + B.vuln + '</span>';
+  if (B.epoison) eb += '<span class="badge">毒 ' + B.epoison + '</span>';
+  document.getElementById('enemyBadges').innerHTML = eb;
+  let pb = '';
+  if (B.pblock) pb += '<span class="badge block">🛡️ ブロック ' + B.pblock + '</span>';
+  if (B.pstr) pb += '<span class="badge">筋力 +' + B.pstr + '</span>';
+  if (B.regen) pb += '<span class="badge">再生 ' + B.regen + '</span>';
+  if (B.venom) pb += '<span class="badge">毒使い</span>';
+  if (B.poison) pb += '<span class="badge">毒 ' + B.poison + '</span>';
+  document.getElementById('playerBadges').innerHTML = pb;
+  document.getElementById('drawCount').textContent = B.drawPile.length;
+  document.getElementById('discardCount').textContent = B.discard.length;
+  document.getElementById('deckCount').textContent = S.deck.length;
+  const hand = document.getElementById('hand');
+  hand.innerHTML = '';
+  B.hand.forEach((entry, idx) => {
+    const c = cardObj(entry);
+    const el = cardElement(c, () => playCard(idx));
+    if (c.cost > B.energy) el.classList.add('disabled');
+    hand.appendChild(el);
+  });
+}
+function logInit() { document.getElementById('log').innerHTML = ''; }
+function addLog(t) {
+  const el = document.getElementById('log');
+  el.innerHTML += t + '<br>';
+  el.scrollTop = el.scrollHeight;
+}
+
+// ===== イベント =====
+document.getElementById('endTurnBtn').addEventListener('click', endTurn);
+document.getElementById('skipRewardBtn').addEventListener('click', nextFloor);
+document.getElementById('restartBtn').addEventListener('click', newRun);
+document.getElementById('newRunBtn').addEventListener('click', newRun);
+document.getElementById('restHealBtn').addEventListener('click', () => {
+  healPlayer(Math.floor(S.pmax * 0.3));
+  startBattle();
+});
+document.getElementById('restUpgradeBtn').addEventListener('click', () => {
+  const list = document.getElementById('upgradeList');
+  list.innerHTML = '<p class="sub">強化するカードを選んでね（タップで決定）</p>';
+  const box = document.createElement('div');
+  box.style.display = 'flex'; box.style.gap = '8px'; box.style.flexWrap = 'wrap'; box.style.justifyContent = 'center'; box.style.marginTop = '10px';
+  S.deck.forEach((entry, i) => {
+    if (typeof entry !== 'string') return;
+    const el = cardElement(CARD_BY_ID[entry], () => {
+      S.deck[i] = { up: entry };
+      startBattle();
+    });
+    box.appendChild(el);
+  });
+  list.appendChild(box);
+});
+
+newRun();
+</script>
+</body>
+</html>

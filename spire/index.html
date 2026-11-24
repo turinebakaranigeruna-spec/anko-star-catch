@@ -216,11 +216,14 @@ function shuffle(a) {
 // ===== バトル =====
 let B = null;
 function enemyForFloor(f) {
-  if (f === TOTAL_FLOORS) return Object.assign({}, BOSS);
-  if (f === 4) return Object.assign({}, ELITE);
-  const base = ENEMIES[Math.floor(Math.random()*ENEMIES.length)];
-  const e = Object.assign({}, base);
-  e.hp = base.hp + (f-1)*4;
+  let e;
+  if (f === TOTAL_FLOORS) e = Object.assign({}, BOSS);
+  else if (f === 4) e = Object.assign({}, ELITE);
+  else {
+    const base = ENEMIES[Math.floor(Math.random()*ENEMIES.length)];
+    e = Object.assign({}, base);
+    e.hp = base.hp + (f-1)*4;
+  }
   e.maxhp = e.hp;
   return e;
 }
